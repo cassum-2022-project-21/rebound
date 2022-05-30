@@ -357,6 +357,8 @@ void reb_collision_search(struct reb_simulation* const r){
         if (c.p1 != -1 && c.p2 != -1){
             // Resolve collision
             int outcome = resolve(r, c);
+            // Force status to REB_EXIT_COLLISION
+            r->status = REB_EXIT_COLLISION
             
             // Remove particles
             if (outcome & 1){

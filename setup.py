@@ -17,7 +17,7 @@ try:
     ghash = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("ascii")
     ghash_arg = "-DGITHASH="+ghash.strip()
 except:
-    ghash_arg = "-DGITHASH=2d9a3038c5360173ec43aa0ce97767ab002aa1f1" #GITHASHAUTOUPDATE
+    ghash_arg = "-DGITHASH=a32e1d9227026056c51355dbf7c8ff8db3d30d88" #GITHASHAUTOUPDATE
 
 extra_link_args=[]
 if sys.platform == 'darwin':

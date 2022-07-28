@@ -55,7 +55,7 @@ libreboundmodule = Extension('librebound',
                     include_dirs = ['src'],
                     define_macros=[ ('LIBREBOUND', None) ],
                     # Removed '-march=native' for now.
-                    extra_compile_args=['-fstrict-aliasing', '-O3','-std=c99','-Wno-unknown-pragmas', ghash_arg, '-DLIBREBOUND', '-D_GNU_SOURCE', '-fPIC'],
+                    extra_compile_args=['-fstrict-aliasing', '-O3','-std=c99','-Wno-unknown-pragmas', ghash_arg, '-DLIBREBOUND', '-D_GNU_SOURCE', '-fPIC', '-march=native', '-fno-math-errno', '-fno-trapping-math'],
                     extra_link_args=extra_link_args,
                     )
 

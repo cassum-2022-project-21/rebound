@@ -1,10 +1,77 @@
 # -*- coding: utf-8 -*-
 import math
 from .particle import Particle
-from itertools import cycle
+from itertools import cycle, count
+import abc
 
+class _OrbitPlotAnimMixin(object):
+    __metaclass__ = abc.ABCMeta
 
-class OrbitPlot:
+    @abc.abstractproperty
+    def all_artists(self):
+        raise NotImplementedError("all_artists not implemented")
+
+    @abc.abstractmethod
+    def draw(self, *args, update, **kwargs):
+        raise NotImplementedError("draw not implemented")
+
+    def animate(self, stepper, frames, update_extra=None, **kwargs):
+        try:
+            from matplotlib.animation import FuncAnimation
+        except:
+            raise ImportError("Error importing matplotlib and/or numpy. Plotting functions not available. If running from within a jupyter notebook, try calling '%matplotlib inline' beforehand.")
+
+        self._anim_artists_visible = None
+
+        def anim_func(frame):
+            stepper(frame)
+            self.draw(update=True)
+
+            if update_extra:
+                artists = (*update_extra(), *self.all_artists)
+            else:
+                artists = self.all_artists
+
+            if not self._anim_artists_visible:
+                for artist in artists:
+                    artist.set_visible(True)
+                self._anim_artists_visible = True
+
+            return artists
+
+        def anim_init():
+            if update_extra:
+                artists = (*update_extra(), *self.all_artists)
+            else:
+                artists = self.all_artists
+
+            for artist in artists:
+                artist.set_visible(False)
+            self._anim_artists_visible = False
+
+            return artists
+
+        return FuncAnimation(self.fig, anim_func, init_func=anim_init, frames=frames, blit=True, repeat=False, **kwargs)
+
+    def animate_steps(self, steps, **kwargs):
+        self.anim_step = 0
+        def _stepper(step):
+            self.sim.steps(step - self.anim_step)
+            self.anim_step = step
+        return self.animate(_stepper, steps, **kwargs)
+
+    def animate_infinite_steps(self, nsteps, **kwargs):
+        return self.animate_steps(count(0, nsteps), **kwargs)
+
+    def animate_times(self, times, **kwargs):
+        def _stepper(time):
+            self.sim.integrate(time)
+        return self.animate(_stepper, times, **kwargs)
+
+    def animate_infinite_times(self, dt, **kwargs):
+        return self.animate_times(count(self.sim.t, dt), **kwargs)
+
+class OrbitPlot(_OrbitPlotAnimMixin):
     """
     Class for visualizing simulations using instantaneous orbits.
     """
@@ -69,6 +136,8 @@ class OrbitPlot:
         >>> op.fig.savefig("image.png") # save figure to file
 
         """
+        super(OrbitPlot, self).__init__()
+
         try:
             import matplotlib.pyplot as plt
         except:
@@ -110,6 +179,8 @@ class OrbitPlot:
         self.orbits = None
         self.primary = None
         self.particles = None
+        self.periastrons = None
+
         self.draw(updateLimits=updateLimits)
 
     @property
@@ -188,13 +259,9 @@ class OrbitPlot:
             color_list.append(colori)
 
         if self._show_primary:
-            pc = self.ax.scatter([],[], marker="*", s=35*self._lw, facecolor="black", edgecolor=None, zorder=3)
-            self.ax.add_collection(pc)
-            self.primary = pc
+            self.primary = self.ax.scatter([],[], marker="*", s=35*self._lw, facecolor="black", edgecolor=None, zorder=3)
         
-        pc = self.ax.scatter([], [], s=25*self._lw, facecolor="black", edgecolor=None, zorder=3)
-        self.ax.add_collection(pc)
-        self.particles = pc
+        self.particles = self.ax.scatter([], [], s=25*self._lw, facecolor="black", edgecolor=None, zorder=3)
         
         lcs = []
 
@@ -221,7 +288,6 @@ class OrbitPlot:
         if self._periastron:
             lc = LineCollection([], lw=self._lw, zorder=1, linestyle="dotted")
             lc.set_color(color_list)
-            self.ax.add_collection(lc)
             self.periastrons = lc
 
 
@@ -318,9 +384,21 @@ class OrbitPlot:
             self.ax.set_xlim(self._xlim)
         if self._ylim:
             self.ax.set_ylim(self._ylim)
-        
 
-class OrbitPlotSet:
+    @property
+    def all_artists(self):
+        artists = []
+        if self.particles:
+            artists.append(self.particles)
+        if self.orbits:
+            artists.extend(self.orbits)
+        if self.primary:
+            artists.append(self.primary)
+        if self.periastrons:
+            artists.append(self.periastrons)      
+        return artists  
+
+class OrbitPlotSet(_OrbitPlotAnimMixin):
     """
     Class for visualizing simulations using instantaneous orbits in 3D. Uses three rebound.OrbitPlot instances internally.
     """
@@ -336,7 +414,7 @@ class OrbitPlotSet:
         slices            : float, optional
             Changes the height and width of the top and right plot relative to the main plot. Default: 0.5.
         """
-
+        super(OrbitPlotSet, self).__init__()
         try:
             import matplotlib.pyplot as plt
             from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -379,17 +457,27 @@ class OrbitPlotSet:
         self.main  = OrbitPlot(sim, fig=self.fig, ax=self.ax_main, projection="xy", **kwargs)
         self.top   = OrbitPlot(sim, fig=self.fig, ax=self.ax_top, projection="xz", **kwargs)
         self.right = OrbitPlot(sim, fig=self.fig, ax=self.ax_right, projection="zy", **kwargs)
-        
-        self.draw(updateLimits=updateLimits)
+
+        # Make sure we use update=True here so we don't get duplicate artists
+        self.draw(update=True, updateLimits=updateLimits)
 
     def draw(self, update=False, updateLimits=True):
         self.main.draw(update=update, updateLimits=updateLimits)
         self.top.draw(update=update, updateLimits=updateLimits)
         self.right.draw(update=update, updateLimits=updateLimits)
+
     def update(self, updateLimits=True):
         self.main.update(updateLimits=updateLimits)
         self.top.update(updateLimits=updateLimits)
         self.right.update(updateLimits=updateLimits)
+
+    @property
+    def all_artists(self):
+        return [
+            *self.main.all_artists,
+            *self.top.all_artists,
+            *self.right.all_artists,
+        ]
 
 
 def get_color(color):
